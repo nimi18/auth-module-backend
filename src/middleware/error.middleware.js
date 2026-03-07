@@ -1,28 +1,42 @@
 // src/middleware/error.middleware.js
-const logger = require("../config/logger");
-const { fail } = require("../utils/response.util");
-
 /**
- * Central error handler (Enterprise response format)
- * Returns:
- *   { success:false, error:{ code, message } }
+ * Centralized Error Middleware
+ * ----------------------------
+ * Converts thrown errors into the enterprise error envelope:
+ *
+ * {
+ *   success: false,
+ *   error: {
+ *     code: "ERROR_CODE",
+ *     message: "Human readable message"
+ *   }
+ * }
+ *
+ * Internal errors are logged and sanitized before reaching the client.
  */
+
+const logger = require("../config/logger");
+const { sendError } = require("../utils/response.util");
+
 function errorMiddleware(err, req, res, next) {
   if (res.headersSent) return next(err);
 
-  const statusCode = err?.statusCode || err?.status || 500;
+  const statusCode = err.statusCode || err.status || 500;
   const code =
-    err?.code || (statusCode >= 500 ? "INTERNAL_SERVER_ERROR" : "ERROR");
+    err.code || (statusCode >= 500 ? "INTERNAL_SERVER_ERROR" : "ERROR");
 
-  const isPublic = Boolean(err?.isPublic);
-  const message = isPublic ? (err?.message || "Error") : "Something went wrong";
-
-  // Log only server errors or non-public errors
-  if (statusCode >= 500 || !isPublic) {
-    logger.error(err?.message || "Unhandled error", { err });
+  if (statusCode >= 500 || !err.isPublic) {
+    logger.error(err.message || "Unhandled error", { err });
   }
 
-  return fail(res, { statusCode, code, message });
+  const message = err.isPublic ? err.message : "Something went wrong";
+
+  return sendError(res, {
+    statusCode,
+    code,
+    message,
+    meta: err.meta || null,
+  });
 }
 
 module.exports = errorMiddleware;

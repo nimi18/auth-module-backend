@@ -1,29 +1,34 @@
 // src/middleware/auth.middleware.js
 /**
- * Auth Middleware
- * ---------------
- * Validates Bearer token and attaches decoded user payload to req.user
+ * Authentication Middleware
+ * -------------------------
+ * Extracts and verifies JWT from Authorization header:
  *
- * Error response is handled by error.middleware.js
+ * Authorization: Bearer <token>
+ *
+ * On success:
+ * - attaches decoded payload to req.user
+ *
+ * On failure:
+ * - forwards standardized AppError to error middleware
  */
 
 const { verifyToken } = require("../utils/jwt.util");
 const AppError = require("../utils/appError");
 
 function requireAuth(req, res, next) {
+  const header = String(req.headers.authorization || "");
+  const [scheme, token] = header.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    return next(new AppError("Unauthorized", 401, "UNAUTHORIZED", true));
+  }
+
   try {
-    const header = String(req.headers?.authorization || "");
-    const [scheme, token] = header.split(" ");
-
-    if (scheme !== "Bearer" || !token) {
-      throw new AppError("Unauthorized", 401, "UNAUTHORIZED", true);
-    }
-
     const payload = verifyToken(token);
     req.user = payload;
-
     return next();
-  } catch (e) {
+  } catch (_err) {
     return next(new AppError("Unauthorized", 401, "UNAUTHORIZED", true));
   }
 }

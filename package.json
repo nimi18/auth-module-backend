@@ -1,7 +1,7 @@
 {
   "name": "auth-module-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Enterprise-grade authentication microservice (Node.js + Express + MongoDB)",
   "main": "index.js",
   "scripts": {
     "test": "cross-env NODE_ENV=test mocha \"./test/**/*.test.js\" --timeout 20000 --exit",
@@ -9,7 +9,16 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js"
   },
-  "keywords": [],
+  "keywords": [
+    "auth",
+    "authentication",
+    "jwt",
+    "oauth",
+    "microservice",
+    "express",
+    "mongodb",
+    "swagger"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
@@ -25,7 +34,9 @@
     "mongoose": "^8.20.1",
     "nodemailer": "^7.0.10",
     "pino": "^10.1.0",
-    "pino-pretty": "^13.1.2"
+    "pino-pretty": "^13.1.2",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "chai": "^6.2.2",

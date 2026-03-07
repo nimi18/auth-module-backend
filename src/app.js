@@ -1,30 +1,39 @@
 // src/app.js
 /**
- * Express app factory (test-friendly + production-friendly).
- * - Security headers via helmet
- * - CORS configured
- * - JSON + urlencoded enabled
+ * Express Application Factory
+ * ---------------------------
+ * Creates the configured Express app instance.
+ *
+ * Includes:
+ * - Helmet security headers
+ * - CORS configuration
+ * - JSON + urlencoded body parsing
  * - Health endpoint
- * - Error middleware at the end
+ * - Auth routes
+ * - Swagger UI (disabled in test)
+ * - Centralized error handling
  */
 
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const swaggerUi = require("swagger-ui-express");
 
 const authRoutes = require("./routes/auth.routes");
 const errorMiddleware = require("./middleware/error.middleware");
+const swaggerSpec = require("./config/swagger");
 const { FRONTEND_URL, IS_PROD } = require("./config/env");
+const { sendSuccess } = require("./utils/response.util");
 
 function createApp() {
   const app = express();
 
-  // If behind reverse proxy (Render/NGINX), enable this for correct IP/rate limit behavior
-  if (IS_PROD) app.set("trust proxy", 1);
+  if (IS_PROD) {
+    app.set("trust proxy", 1);
+  }
 
   app.use(helmet());
 
-  // CORS: allow configured frontend origin; allow all if FRONTEND_URL="*"
   app.use(
     cors({
       origin: FRONTEND_URL === "*" ? true : FRONTEND_URL,
@@ -36,7 +45,7 @@ function createApp() {
   app.use(express.urlencoded({ extended: true }));
 
   app.get("/health", (req, res) => {
-    res.status(200).json({
+    return sendSuccess(res, {
       status: "ok",
       uptime: process.uptime(),
       timestamp: new Date().toISOString(),
@@ -45,7 +54,10 @@ function createApp() {
 
   app.use("/api/auth", authRoutes);
 
-  // error handler must be last
+  if (process.env.NODE_ENV !== "test") {
+    app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  }
+
   app.use(errorMiddleware);
 
   return app;

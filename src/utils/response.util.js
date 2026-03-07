@@ -1,29 +1,60 @@
 // src/utils/response.util.js
 /**
- * Response helpers (Enterprise response format)
+ * Response Utility
+ * ----------------
+ * Centralizes the enterprise response envelope used across the service.
  *
- * Success:
- *   { success: true, data: {...} }
+ * Success response shape:
+ * {
+ *   success: true,
+ *   data: { ... }
+ * }
  *
- * Error:
- *   { success: false, error: { code, message } }
+ * Error response shape:
+ * {
+ *   success: false,
+ *   error: {
+ *     code: "ERROR_CODE",
+ *     message: "Human readable message",
+ *     ...(optional meta)
+ *   }
+ * }
+ *
+ * Why this exists:
+ * - Keeps controllers thin and consistent
+ * - Makes frontend/API client integration predictable
+ * - Ensures tests and runtime share the same contract
  */
 
-function ok(res, data = {}, status = 200) {
-  return res.status(status).json({
+function sendSuccess(res, data, statusCode = 200) {
+  return res.status(statusCode).json({
     success: true,
     data,
   });
 }
 
-function fail(res, { statusCode = 500, code = "INTERNAL_SERVER_ERROR", message = "Something went wrong" } = {}) {
+function sendError(
+  res,
+  {
+    statusCode = 500,
+    code = "INTERNAL_SERVER_ERROR",
+    message = "Something went wrong",
+    meta = null,
+  }
+) {
+  const error = { code, message };
+
+  if (meta) {
+    error.meta = meta;
+  }
+
   return res.status(statusCode).json({
     success: false,
-    error: {
-      code,
-      message,
-    },
+    error,
   });
 }
 
-module.exports = { ok, fail };
+module.exports = {
+  sendSuccess,
+  sendError,
+};

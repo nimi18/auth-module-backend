@@ -1,13 +1,82 @@
 // src/controllers/socialAuth.controller.js
+/**
+ * Social Auth Controller
+ * ----------------------
+ * Handles provider-based authentication using route param `:provider`.
+ * Supported providers:
+ * - google
+ * - facebook
+ *
+ * All responses use the enterprise success envelope.
+ */
+
 const AppError = require("../utils/appError");
 const socialService = require("../services/socialAuth.service");
-const { ok } = require("../utils/response.util");
+const { sendSuccess } = require("../utils/response.util");
 
 /**
- * POST /api/auth/social/:provider
- * Params: provider in [google, facebook]
- * Body:
- *   { token: <idToken/accessToken> }
+ * @openapi
+ * /api/auth/social/google:
+ *   post:
+ *     tags: [Social Auth]
+ *     summary: Google login/signup
+ *     description: Verifies a Google ID token, creates or links the user account, and returns JWT.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: false
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: "google_id_token"
+ *             required: [token]
+ *     responses:
+ *       200:
+ *         description: Google authentication successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeSuccessAuth"
+ *       400:
+ *         description: Invalid token, missing email, or unverified email
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeError"
+ *
+ * /api/auth/social/facebook:
+ *   post:
+ *     tags: [Social Auth]
+ *     summary: Facebook login/signup
+ *     description: Validates a Facebook access token, creates or links the user account, and returns JWT.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: false
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 example: "facebook_access_token"
+ *             required: [token]
+ *     responses:
+ *       200:
+ *         description: Facebook authentication successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeSuccessAuth"
+ *       400:
+ *         description: Invalid token or missing email
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeError"
  */
 async function socialLogin(req, res) {
   const provider = String(req.params.provider || "").toLowerCase();
@@ -24,11 +93,20 @@ async function socialLogin(req, res) {
   } else if (provider === "facebook") {
     result = await socialService.handleFacebookLogin(token);
   } else {
-    throw new AppError("Unsupported provider", 400, "PROVIDER_NOT_SUPPORTED", true);
+    throw new AppError(
+      "Unsupported provider",
+      400,
+      "PROVIDER_NOT_SUPPORTED",
+      true
+    );
   }
 
-  return ok(res, {
-    user: { id: result.user._id, name: result.user.name, email: result.user.email },
+  return sendSuccess(res, {
+    user: {
+      id: result.user._id,
+      name: result.user.name,
+      email: result.user.email,
+    },
     token: result.token,
   });
 }
