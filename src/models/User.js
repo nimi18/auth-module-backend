@@ -1,12 +1,11 @@
+// src/models/User.js
 /**
- * Barrel export for User model
+ * Barrel export for User model.
  *
- * Purpose:
- * - Allows clean imports like: require("../models/User")
- * - Keeps actual model file lowercase and structured
- * - Avoids filesystem casing issues
- *
- * This pattern is common in enterprise Node.js codebases.
+ * Why keep this file?
+ * - Maintains clean imports like require("../models/User")
+ * - Preserves compatibility with existing code
+ * - Avoids accidental casing/import issues across platforms
  */
 
 module.exports = require("./user.model");

@@ -2,21 +2,20 @@
 /**
  * Authentication Middleware
  * -------------------------
- * Extracts and verifies JWT from Authorization header:
- *
- * Authorization: Bearer <token>
- *
- * On success:
- * - attaches decoded payload to req.user
- *
- * On failure:
- * - forwards standardized AppError to error middleware
+ * - Extracts JWT
+ * - Verifies token
+ * - Checks Redis blacklist
+ * - Attaches user to request
  */
 
 const { verifyToken } = require("../utils/jwt.util");
 const AppError = require("../utils/appError");
+const {
+  isTokenBlacklisted,
+} = require("../services/tokenBlacklist.service");
+const errorCodes = require("../constants/errorCodes");
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const header = String(req.headers.authorization || "");
   const [scheme, token] = header.split(" ");
 
@@ -25,11 +24,20 @@ function requireAuth(req, res, next) {
   }
 
   try {
+    // ✅ NEW: check blacklist
+    const blacklisted = await isTokenBlacklisted(token);
+    if (blacklisted) {
+      return next(
+        new AppError("Token is invalidated", 401, "TOKEN_BLACKLISTED", true)
+      );
+    }
+
     const payload = verifyToken(token);
     req.user = payload;
+
     return next();
   } catch (_err) {
-    return next(new AppError("Unauthorized", 401, "UNAUTHORIZED", true));
+    return next(new AppError("Token is invalidated",401,errorCodes.TOKEN_BLACKLISTED,true));
   }
 }
 

@@ -36,6 +36,17 @@ router.post(
   asyncHandler(socialController.socialLogin)
 );
 
+router.post(
+  "/refresh-token",
+  asyncHandler(authController.refreshToken)
+);
+
+router.post(
+  "/logout",
+  requireAuth,
+  asyncHandler(authController.logout)
+);
+
 router.get("/me", requireAuth, asyncHandler(authController.me));
 
 module.exports = router;

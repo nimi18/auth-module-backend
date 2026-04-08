@@ -14,6 +14,7 @@
  */
 
 const authService = require("../services/auth.service");
+const { blacklistToken } = require("../services/tokenBlacklist.service");
 const AppError = require("../utils/appError");
 const { sendSuccess } = require("../utils/response.util");
 
@@ -109,7 +110,7 @@ async function signup(req, res) {
  *   post:
  *     tags: [Auth]
  *     summary: Login (local)
- *     description: Authenticates a local user and returns a JWT token.
+ *     description: Authenticates a local user and returns an access token and refresh token.
  *     requestBody:
  *       required: true
  *       content:
@@ -144,16 +145,31 @@ async function login(req, res) {
   const email = req.body?.email;
   const password = req.body?.password;
 
+  if (!email || !password) {
+    throw new AppError(
+      "Email and password are required",
+      400,
+      "VALIDATION_ERROR",
+      true
+    );
+  }
+
   const result = await authService.login({ email, password });
 
-  return sendSuccess(res, {
-    user: {
-      id: result.user._id,
-      name: result.user.name,
-      email: result.user.email,
+  return sendSuccess(
+    res,
+    {
+      user: {
+        id: result.user._id,
+        name: result.user.name,
+        email: result.user.email,
+      },
+      token: result.accessToken,
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
     },
-    token: result.token,
-  });
+    200
+  );
 }
 
 /**
@@ -192,6 +208,16 @@ async function login(req, res) {
  */
 async function forgotPassword(req, res) {
   const email = req.body?.email;
+
+  if (!email) {
+    throw new AppError(
+      "Email is required",
+      400,
+      "VALIDATION_ERROR",
+      true
+    );
+  }
+
   const result = await authService.sendPasswordReset(email);
 
   return sendSuccess(res, result);
@@ -239,8 +265,8 @@ async function forgotPassword(req, res) {
  */
 async function resetPassword(req, res) {
   const email = req.body?.email;
-  const token = req.body?.token;
-  const password = req.body?.password;
+  const token = req.body?.token || req.body?.resetToken;
+  const password = req.body?.password || req.body?.newPassword;
 
   if (!email || !token || !password) {
     throw new AppError(
@@ -251,9 +277,128 @@ async function resetPassword(req, res) {
     );
   }
 
-  const result = await authService.resetPassword({ email, token, password });
+  const result = await authService.resetPassword({
+    email,
+    token,
+    password,
+  });
 
   return sendSuccess(res, result);
+}
+
+/**
+ * @openapi
+ * /api/auth/refresh-token:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Refresh access token
+ *     description: Accepts a valid refresh token and returns a new access token.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: false
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: "refresh_token_from_login"
+ *             required: [refreshToken]
+ *     responses:
+ *       200:
+ *         description: Access token refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeSuccessMessage"
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeError"
+ *       401:
+ *         description: Invalid refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeError"
+ */
+async function refreshToken(req, res) {
+  const refreshTokenValue = req.body?.refreshToken;
+
+  if (!refreshTokenValue) {
+    throw new AppError(
+      "Refresh token is required",
+      400,
+      "VALIDATION_ERROR",
+      true
+    );
+  }
+
+  const result = await authService.refreshAccessToken(refreshTokenValue);
+
+  return sendSuccess(
+    res,
+    {
+      token: result.accessToken,
+      accessToken: result.accessToken,
+    },
+    200
+  );
+}
+
+/**
+ * @openapi
+ * /api/auth/logout:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Logout current user
+ *     description: Blacklists the current access token and deletes the provided refresh token.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: false
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 example: "refresh_token_from_login"
+ *     responses:
+ *       200:
+ *         description: Logout successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeSuccessMessage"
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeError"
+ */
+async function logout(req, res) {
+  const header = String(req.headers.authorization || "");
+  const [scheme, token] = header.split(" ");
+  const refreshTokenValue = req.body?.refreshToken;
+
+  if (scheme !== "Bearer" || !token) {
+    throw new AppError("Unauthorized", 401, "UNAUTHORIZED", true);
+  }
+
+  await blacklistToken(token);
+
+  if (refreshTokenValue) {
+    await authService.logoutUser(refreshTokenValue);
+  }
+
+  return sendSuccess(res, { message: "Logged out successfully" });
 }
 
 /**
@@ -278,9 +423,38 @@ async function resetPassword(req, res) {
  *           application/json:
  *             schema:
  *               $ref: "#/components/schemas/EnvelopeError"
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/EnvelopeError"
  */
 async function me(req, res) {
-  return sendSuccess(res, { user: req.user });
+  const userId = req.user?.sub;
+
+  if (!userId) {
+    throw new AppError("Unauthorized", 401, "UNAUTHORIZED", true);
+  }
+
+  const user = await authService.getUserById(userId);
+
+  if (!user) {
+    throw new AppError("User not found", 404, "USER_NOT_FOUND", true);
+  }
+
+  return sendSuccess(
+    res,
+    {
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        providers: user.providers || [],
+      },
+    },
+    200
+  );
 }
 
 module.exports = {
@@ -288,5 +462,7 @@ module.exports = {
   login,
   forgotPassword,
   resetPassword,
+  refreshToken,
+  logout,
   me,
 };

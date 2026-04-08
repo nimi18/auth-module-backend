@@ -1,22 +1,24 @@
 // src/models/user.model.js
 /**
- * User Model
+ * User model
  * ----------
- * Enterprise notes:
- * - email is unique + normalized (lowercase + trim)
- * - passwordHash is optional (null for social-only accounts)
- * - providers stores linked social identities
- * - `name` is required (per your requirement)
+ * Designed for:
+ * - local authentication
+ * - social login account linking
+ * - scalable future extension (roles, profile data, verification flags)
  */
 
 const mongoose = require("mongoose");
+
+const ALLOWED_PROVIDERS = ["google", "facebook"];
 
 const providerSchema = new mongoose.Schema(
   {
     provider: {
       type: String,
-      enum: ["google", "facebook"],
+      enum: ALLOWED_PROVIDERS,
       required: true,
+      trim: true,
     },
     providerId: {
       type: String,
@@ -39,10 +41,8 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: [true, "Email is required"],
-      unique: true,
       lowercase: true,
       trim: true,
-      index: true,
     },
     passwordHash: {
       type: String,
@@ -53,14 +53,42 @@ const userSchema = new mongoose.Schema(
       default: [],
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    versionKey: false,
+  }
 );
 
-// Prevent duplicate provider links (same provider + providerId)
+// Unique email constraint
+userSchema.index({ email: 1 }, { unique: true });
+
+// Prevent the same provider account from being linked multiple times
 userSchema.index(
   { "providers.provider": 1, "providers.providerId": 1 },
   { unique: true, sparse: true }
 );
 
-const User = mongoose.model("User", userSchema);
+userSchema.methods.toSafeObject = function toSafeObject() {
+  return {
+    id: this._id,
+    name: this.name,
+    email: this.email,
+    providers: this.providers || [],
+    createdAt: this.createdAt,
+    updatedAt: this.updatedAt,
+  };
+};
+
+userSchema.set("toJSON", {
+  transform: function transform(doc, ret) {
+    ret.id = ret._id;
+    delete ret._id;
+    delete ret.__v;
+    delete ret.passwordHash;
+    return ret;
+  },
+});
+
+const User = mongoose.models.User || mongoose.model("User", userSchema);
+
 module.exports = User;

@@ -1,8 +1,11 @@
-# Auth Module Backend (Enterprise-Grade)
+# Auth Module Backend 
 
-A **production-ready authentication microservice** built with **Node.js, Express, and MongoDB**, following **enterprise architecture**, **secure auth practices**, and **clean code standards**.
+A **production-ready authentication microservice** built with **Node.js, Express, MongoDB, and Redis**, following **enterprise architecture**, **secure auth practices**, and **clean code standards**.
+
+This service is designed to be **plug-and-play for any frontend** (Web / Mobile) and can be reused across multiple applications.
 
 Ideal for:
+
 - Freelance project delivery (plug-and-play auth microservice)
 - SaaS / startup backend foundations
 - Personal GitHub portfolio
@@ -10,50 +13,83 @@ Ideal for:
 
 ---
 
+## Why This Project Stands Out
+
+Unlike basic auth systems, this service includes:
+
+- JWT-based authentication with real logout (token revocation)
+- Refresh token system (industry standard session handling)
+- Redis-backed token blacklist
+- Secure password reset with hashed tokens
+- Fully test-covered authentication flows
+- Enterprise-grade structure (controllers → services → repositories)
+
+---
+
 ## Features
 
 ### Authentication (Local)
 - Signup with **name + email + password**
-- Login with email + password
-- JWT-based session token
-- Protected `/me` endpoint
+- Login with **email + password**
+- JWT-based access token
+- Refresh token system (DB-backed)
+- Protected `/me` endpoint (DB-validated user)
+
+### Session Management
+- Short-lived access tokens
+- Long-lived refresh tokens (stored in DB)
+- `/refresh-token` endpoint for silent session renewal
+
+### Logout System (Advanced)
+- Redis-backed token blacklist
+- Access tokens invalidated after logout
+- Refresh tokens deleted from DB
+- TTL-based automatic cleanup
 
 ### Password Management
 - Forgot password (generic response — prevents user enumeration)
-- Reset password using **hashed token**
-- Token expiry & reuse protection
+- Secure reset token generation
+- Token hashing before database storage
+- One-time token usage
+- Password reset email via **Brevo**
 
 ### Social Authentication
 - Google OAuth login
 - Facebook OAuth login
-- Provider linking to existing accounts (no duplicate users)
+- Provider linking to existing accounts
 
 ### Security
 - Password hashing (bcrypt)
-- JWT signing + verification
-- Auth rate limiting
-- Helmet + CORS enabled
-- Reset token hashing (never store raw tokens)
+- JWT signing and verification
+- Redis-backed token revocation
+- Rate limiting on auth endpoints
+- Helmet security headers
+- CORS protection
+- Generic responses to prevent enumeration
 
 ### Testing
-- Integration tests (Mocha + Chai + Supertest)
-- MongoDB Memory Server (isolated test DB)
-- Google/Facebook APIs fully mocked (Sinon + Nock)
+- Full integration test suite
+- Mocha + Chai + Supertest
+- MongoDB Memory Server
+- External APIs mocked
 
 ---
 
 ## Tech Stack
 
-- Node.js
-- Express
-- MongoDB + Mongoose
-- JWT (jsonwebtoken)
-- bcryptjs
-- Mocha / Chai / Supertest
-- MongoDB Memory Server
-- Sinon & Nock
-- Helmet / CORS / express-rate-limit
-- Pino logger
+| Layer | Technology |
+|------|------------|
+| Runtime | Node.js |
+| Framework | Express |
+| Database | MongoDB |
+| Cache / Session | Redis |
+| ODM | Mongoose |
+| Auth | JWT |
+| Password Hashing | bcrypt |
+| API Documentation | Swagger |
+| Email Service | Brevo Transactional Email |
+| Testing | Mocha / Chai / Supertest |
+| Logging | Pino |
 
 ---
 
@@ -67,6 +103,8 @@ src/
 │   ├── db.js
 │   ├── env.js
 │   ├── logger.js
+|   ├── redis.js
+|   ├── swagger.js
 │   └── brevoMailer.js
 ├── constants/
 │   └── errorCodes.js
@@ -80,23 +118,29 @@ src/
 │   └── rateLimit.middleware.js
 ├── models/
 │   ├── user.model.js
+|   ├── User.js
+|   ├── refreshToken.model.js
 │   └── passwordResetToken.model.js
 ├── repositories/
 │   ├── user.repo.js
+|   ├── refreshToken.repo.js
 │   └── resetToken.repo.js
 ├── routes/
 │   └── auth.routes.js
 ├── services/
 │   ├── auth.service.js
 │   ├── socialAuth.service.js
+|   ├── tokenBlacklist.service.js
 │   └── mailer.service.js
 └── utils/
     ├── appError.js
     ├── jwt.util.js
     ├── password.util.js
+    ├── response.util.js
     └── crypto.util.js
 
 test/
+├── setup.js
 ├── 00.bootstrap.test.js
 ├── auth.signup.test.js
 ├── auth.login.test.js
@@ -105,6 +149,7 @@ test/
 ├── auth.social.test.js
 └── helpers/
     ├── db.js
+    ├── tokens.js
     └── factories.js
 ```
 ---
@@ -124,6 +169,8 @@ All endpoints are prefixed with:
 |------|--------|------------|--------------|
 | POST | `/signup` | Create a new user account | ❌ |
 | POST | `/login` | Login with email & password | ❌ |
+| POST | `/refresh-token` | Get new access token | ❌ |
+| POST | `/logout` | Logout (invalidate tokens) | ✅ |
 | GET | `/me` | Get current authenticated user | ✅ |
 
 ---
@@ -222,6 +269,27 @@ Enable via:
 
 ---
 
+## Email Service (Brevo)
+
+Password reset emails are delivered using Brevo Transactional Email API.
+
+### Required Environment Variables
+- `BREVO_API_KEY=your_api_key`
+- `BREVO_SENDER_EMAIL=no-reply@example.com`
+- `BREVO_SENDER_NAME=Auth Module`
+
+### Reset Password Email Flow
+
+1. User requests password reset
+2. Backend generates reset token
+3. Token is hashed and stored
+4. Brevo sends reset email
+5. User clicks reset link / button
+6. Frontend loads reset page
+7. Backend validates token and updates password
+
+---
+
 ## Environment Variables
 
 Create a `.env` file using the provided `.env.example`.
@@ -251,6 +319,11 @@ BREVO_SENDER_EMAIL=no-reply@example.com
 
 # API Response Envelope (Optional)
 RESPONSE_ENVELOPE=0
+
+# REDIS
+REDIS_ENABLED=boolean_value
+REDIS_URL=your_redis_url
+REDIS_PREFIX=your_redis_prefix
 ```
 
 ---
@@ -409,10 +482,13 @@ This authentication service is designed with a **security-first mindset**, follo
 - Stable error codes returned for client handling
 
 ---
-
-✔ Secure-by-default configuration  
-✔ Safe for public-facing production APIs  
-✔ Auditable and testable security flows
+### Additionally
+- Logout invalidation prevents toke reuse
+- Refresh tokens reduce attack surface
+- Redis ensures fast token revocation
+- Secure-by-default configuration  
+- Safe for public-facing production APIs  
+- Auditable and testable security flows
 
 ---
 
