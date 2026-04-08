@@ -9,7 +9,7 @@ function getApp() {
   if (!app) {
     // app should be required only after env/db are ready
     const createApp = require("../src/app"); // exports createApp
-    app = createApp(); // ✅ instantiate express app once
+    app = createApp(); // instantiate express app once
   }
   return app;
 }

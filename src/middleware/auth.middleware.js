@@ -24,7 +24,7 @@ async function requireAuth(req, res, next) {
   }
 
   try {
-    // ✅ NEW: check blacklist
+    // check blacklist
     const blacklisted = await isTokenBlacklisted(token);
     if (blacklisted) {
       return next(

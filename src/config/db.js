@@ -15,7 +15,7 @@ mongoose.set("strictQuery", true);
 async function connectDB() {
   try {
     await mongoose.connect(MONGODB_URI, {
-      autoIndex: false, // ✅ avoid index builds on startup in prod
+      autoIndex: false, // avoid index builds on startup in prod
       serverSelectionTimeoutMS: 10_000,
     });
 
